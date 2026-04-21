@@ -1,0 +1,172 @@
+name: Auto Tag On Master
+
+on:
+  push:
+    branches: ["master"]
+
+permissions:
+  contents: write
+
+jobs:
+  tag-from-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create and push version tag if needed
+        id: tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(python - <<'PY'
+          import tomllib
+          with open("pyproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          print(data["project"]["version"])
+          PY
+          )
+          TAG="v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Fetch tags to make the tag existence check accurate.
+          git fetch --tags --force
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            TAG_SHA=$(git rev-list -n 1 "${TAG}")
+            HEAD_SHA=$(git rev-parse HEAD)
+            if [ "${TAG_SHA}" = "${HEAD_SHA}" ]; then
+              echo "Tag ${TAG} already points to HEAD; continuing to release."
+              echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Tag ${TAG} already exists on a different commit."
+            echo "Bump [project].version in pyproject.toml before merging to master."
+            exit 1
+          fi
+
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build distribution artifacts
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Build double-click installer bundles
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${TAG#v}"
+          WHEEL="nexo-${VERSION}-py3-none-any.whl"
+          WHEEL_PATH="dist/${WHEEL}"
+
+          if [ ! -f "$WHEEL_PATH" ]; then
+            echo "error: expected wheel not found: $WHEEL_PATH"
+            exit 1
+          fi
+
+          mkdir -p dist/installer-macos dist/installer-windows
+          cp "$WHEEL_PATH" dist/installer-macos/
+          cp "$WHEEL_PATH" dist/installer-windows/
+
+          cat > dist/installer-macos/install-nexo.command <<'EOF'
+          #!/bin/bash
+          set -euo pipefail
+
+          SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+          WHEEL="$(ls "$SCRIPT_DIR"/nexo-*-py3-none-any.whl | head -n 1)"
+
+          if ! command -v python3 >/dev/null 2>&1; then
+            echo "Python 3 is required. Install from https://www.python.org/downloads/ and run again."
+            read -r -n 1 -p "Press any key to close..."
+            echo
+            exit 1
+          fi
+
+          python3 -m pip install --user --upgrade "$WHEEL"
+
+          echo
+          echo "Installed nexo."
+          echo "Run in Terminal: nexo --help"
+          echo "If command not found, add ~/.local/bin to PATH."
+          read -r -n 1 -p "Press any key to close..."
+          echo
+          EOF
+          chmod +x dist/installer-macos/install-nexo.command
+
+          cat > dist/installer-windows/install-nexo.ps1 <<'EOF'
+          $ErrorActionPreference = "Stop"
+
+          $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+          $wheel = Get-ChildItem -Path $scriptDir -Filter "nexo-*-py3-none-any.whl" | Select-Object -First 1
+          if (-not $wheel) {
+            Write-Host "Wheel file not found in installer folder."
+            pause
+            exit 1
+          }
+
+          if (Get-Command py -ErrorAction SilentlyContinue) {
+            & py -3 -m pip install --user --upgrade $wheel.FullName
+          } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+            & python -m pip install --user --upgrade $wheel.FullName
+          } else {
+            Write-Host "Python 3 is required. Install from https://www.python.org/downloads/windows/ and run again."
+            pause
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "Installed nexo."
+          Write-Host "Open a new terminal and run: nexo --help"
+          pause
+          EOF
+
+          cat > dist/installer-windows/install-nexo.bat <<'EOF'
+          @echo off
+          set SCRIPT_DIR=%~dp0
+          powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%install-nexo.ps1"
+          EOF
+
+          (cd dist && zip -r nexo-installer-macos.zip installer-macos >/dev/null)
+          (cd dist && zip -r nexo-installer-windows.zip installer-windows >/dev/null)
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          tmp_checksums=$(mktemp)
+          for f in *; do
+            if [ -f "$f" ]; then
+              case "$f" in
+                checksums.txt|SHA256SUMS.txt)
+                  continue
+                  ;;
+              esac
+              shasum -a 256 "$f"
+            fi
+          done > "$tmp_checksums"
+          mv "$tmp_checksums" checksums.txt
+          cp checksums.txt SHA256SUMS.txt
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          release_files=$(find dist -maxdepth 1 -type f | sort)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" $release_files --clobber
+          else
+            gh release create "$tag" $release_files --generate-notes
+          fi

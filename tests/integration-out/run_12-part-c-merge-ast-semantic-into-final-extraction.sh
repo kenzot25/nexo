@@ -1,0 +1,1 @@
+$(cat tests/integration-out/nexo-out/.nexo_bin) internal-merge tests/integration-out/nexo-out/.nexo_ast.json tests/integration-out/nexo-out/.nexo_semantic.json tests/integration-out/nexo-out/.nexo_extract.json

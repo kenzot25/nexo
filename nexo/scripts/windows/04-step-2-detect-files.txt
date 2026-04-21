@@ -1,0 +1,6 @@
+Corpus: X files · ~Y words
+  code:     N files (.py .ts .go ...)
+  docs:     N files (.md .txt ...)
+  papers:   N files (.pdf ...)
+  images:   N files
+  video:    N files (.mp4 .mp3 ...)

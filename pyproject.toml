@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexo"
+version = "0.1.0"
+description = "AI coding assistant skill (Claude Code) - turn any folder of code, docs, papers, images, or videos into a queryable knowledge graph"
+readme = "README.md"
+license = { file = "LICENSE" }
+keywords = ["claude", "claude-code", "knowledge-graph", "rag", "graphrag", "obsidian", "community-detection", "tree-sitter", "leiden", "llm"]
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.27.0",
+    "networkx",
+    "tree-sitter>=0.23.0",
+    "tree-sitter-python",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "tree-sitter-go",
+    "tree-sitter-rust",
+    "tree-sitter-java",
+    "tree-sitter-c",
+    "tree-sitter-cpp",
+    "tree-sitter-ruby",
+    "tree-sitter-c-sharp",
+    "tree-sitter-kotlin",
+    "tree-sitter-scala",
+    "tree-sitter-php",
+    "tree-sitter-swift",
+    "tree-sitter-lua",
+    "tree-sitter-zig",
+    "tree-sitter-powershell",
+    "tree-sitter-elixir",
+    "tree-sitter-objc",
+    "tree-sitter-julia",
+    "tree-sitter-verilog",
+    "watchdog",
+    "rich",
+]
+
+[project.urls]
+Homepage = "https://github.com/kenzot25/nexo"
+Repository = "https://github.com/kenzot25/nexo"
+Issues = "https://github.com/kenzot25/nexo/issues"
+
+[project.optional-dependencies]
+test = ["pytest"]
+pdf = ["pypdf", "html2text"]
+watch = ["watchdog"]
+leiden = ["graspologic; python_version < '3.13'"]
+office = ["python-docx", "openpyxl"]
+video = ["faster-whisper", "yt-dlp"]
+all = ["pypdf", "html2text", "watchdog", "graspologic; python_version < '3.13'", "python-docx", "openpyxl", "faster-whisper", "yt-dlp", "rich"]
+
+[project.scripts]
+nexo = "nexo.__main__:main"
+nexo-mcp = "nexo.serve:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nexo*"]
+
+[tool.setuptools.package-data]
+nexo = ["skill.md", "skill-windows.md", "scripts/**/*"]

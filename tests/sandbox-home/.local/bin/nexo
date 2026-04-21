@@ -1,0 +1,2 @@
+#!/usr/bin/env sh
+exec "/Users/toandev/Coding/nexo/tests/sandbox-home/.local/share/nexo/venv/bin/python" -m nexo "$@"

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "nexo": {
+      "command": "python3",
+      "args": ["-m", "nexo.serve", "/absolute/path/to/nexo-out/graph.json"]
+    }
+  }
+}
