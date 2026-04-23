@@ -31,7 +31,8 @@ from nexo.workspace import run_workspace_query
 
 try:
     from mcp.server.fastmcp import FastMCP
-except ImportError:  # pragma: no cover - exercised indirectly via CLI fallback
+except Exception:  # pragma: no cover - exercised indirectly via CLI fallback
+    # ImportError or pydantic compatibility issues (e.g., Python 3.14)
     FastMCP = None
 
 

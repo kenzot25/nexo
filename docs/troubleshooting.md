@@ -4,6 +4,21 @@ Common issues and solutions.
 
 ## Installation Issues
 
+### MCP server fails to start (Python 3.14+)
+
+The MCP server has compatibility issues with Python 3.14 due to pydantic changes.
+
+**Symptoms:**
+```
+TypeError: ... RootModel ...
+```
+
+**Workarounds:**
+1. Use Python 3.10-3.12 for MCP server
+2. CLI tools (`nexo query`, `nexo update`, etc.) still work without MCP
+
+**Track fix:** [GitHub Issue](https://github.com/kenzot25/nexo/issues)
+
 ### `python` command not found
 
 Use `python3` instead:

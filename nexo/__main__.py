@@ -660,7 +660,13 @@ def main() -> None:
             print("Usage: nexo hook [install|uninstall|status]", file=sys.stderr)
             sys.exit(1)
     elif cmd == "mcp":
-        from nexo.serve import main as serve_main
+        try:
+            from nexo.serve import main as serve_main
+        except Exception as exc:
+            print(f"error: MCP server unavailable - {exc}", file=sys.stderr)
+            print("  The 'mcp' package may have compatibility issues with your Python version.", file=sys.stderr)
+            print("  CLI query tools still work without MCP server.", file=sys.stderr)
+            sys.exit(1)
 
         serve_main(sys.argv[2:])
     elif cmd == "query":
