@@ -211,7 +211,7 @@ function Install-FromWheelAsset {
     [Parameter(Mandatory = $true)][string]$InstallPath,
     [Parameter(Mandatory = $true)][string]$RepoName,
     [Parameter(Mandatory = $true)][string]$VersionTag,
-    [Parameter(Mandatory = $true)][string]$ChecksumOverride,
+    [string]$ChecksumOverride = "",
     [Parameter(Mandatory = $true)][string]$TempRoot
   )
 
