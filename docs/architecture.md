@@ -1,28 +1,61 @@
-# Architecture
+# Architecture Overview
 
-nexo uses a staged pipeline and exposes the result through both CLI commands and a local MCP server:
+High-level overview of how nexo works.
 
-1. Extract entities/relations from source files and artifacts.
-2. Build a graph structure from extracted records.
-3. Cluster related nodes into communities.
-4. Analyze cohesion, bridges, and high-impact nodes.
-5. Export graph outputs (JSON, HTML, Markdown/wiki).
-6. Query graph slices for focused assistant context.
+For detailed technical documentation, see [Developer Guide](DEVELOPING.md).
 
-## Primary outputs
+## Pipeline
 
-- `nexo-out/graph.json`
-- `nexo-out/GRAPH_REPORT.md`
-- Optional wiki and visualization artifacts
+```
+detect() → extract() → build_graph() → cluster() → analyze() → report() → export()
+```
 
-## Design goals
+| Stage | Description |
+|-------|-------------|
+| **detect** | Find all files in directory, categorize by type |
+| **extract** | Parse files with tree-sitter, extract entities and relationships |
+| **build_graph** | Construct NetworkX graph from extractions |
+| **cluster** | Detect communities using Leiden algorithm |
+| **analyze** | Find god nodes, surprising connections, generate questions |
+| **report** | Generate GRAPH_REPORT.md |
+| **export** | Write graph.json, HTML, wiki, and other formats |
 
-- Reduce token usage by querying graph neighborhoods instead of full corpora.
-- Keep updates incremental with `nexo update .`.
-- Work with local AI hosts via MCP, while keeping Claude project conventions available as compatibility glue.
+## Outputs
 
-## Related docs
+- `nexo-out/graph.json` - Main graph file (JSON)
+- `nexo-out/GRAPH_REPORT.md` - Human-readable analysis
+- `nexo-out/graph.html` - Interactive visualization
+- `nexo-out/wiki/` - Wikipedia-style articles
 
-- `ARCHITECTURE.md`
-- `docs/quickstart.md`
-- `docs/cli.md`
+## Query Flow
+
+When you run `nexo query "..."`:
+
+1. Parse question for keywords
+2. Find matching nodes with `resolve_nodes()`
+3. Traverse graph from best matches (BFS or DFS)
+4. Stay within token budget
+5. Return focused context
+
+## MCP Server
+
+The MCP server (`nexo/serve.py`) exposes graph tools:
+
+- `resolve_nodes` - Fuzzy node search
+- `explain_node` - Explain one node
+- `shortest_path` - Path between nodes
+- `expand_subgraph` - Neighborhood expansion
+- `workspace_query` - Multi-repo query
+- `graph_summary` - Graph overview
+
+See [MCP Guide](MCP_GUIDE.md) for usage.
+
+## Session Verification
+
+Tool calls are logged to `~/.nexo_session.jsonl`. Verify with:
+
+```bash
+nexo verify-subagent --workspace . --mode strict --json
+```
+
+See [Developer Guide](DEVELOPING.md) for implementation details.

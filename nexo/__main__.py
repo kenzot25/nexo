@@ -596,6 +596,13 @@ def main() -> None:
         print("    --mode M              basic | strict (default: strict)")
         print("    --min-calls N         minimum nexo MCP tool calls required (default: 2)")
         print("    --json                print machine-readable JSON result")
+        print("  verify-subagent         verify MCP usage with subagent-based validation")
+        print("    --workspace DIR       workspace path to match log entries (default: .)")
+        print("    --session-log FILE    session log path (default: ~/.nexo_session.jsonl)")
+        print("    --window-hours N      lookback window in hours (default: 24)")
+        print("    --mode M              basic | strict (default: strict)")
+        print("    --answer TEXT         final answer text from main agent (optional)")
+        print("    --json                print machine-readable JSON result")
         print("  hook install            install post-commit/post-checkout git hooks (all platforms)")
         print("  hook uninstall          remove git hooks")
         print("  hook status             check if git hooks are installed")
@@ -661,6 +668,7 @@ def main() -> None:
             print("Usage: nexo query \"<question>\" [--dfs] [--budget N] [--graph path]", file=sys.stderr)
             sys.exit(1)
         from nexo.query_service import query_graph
+        from nexo.mcp_verify import _DEFAULT_SESSION_LOG as _MCP_SESSION_LOG
 
         question = sys.argv[2]
         use_dfs = "--dfs" in sys.argv
@@ -693,6 +701,20 @@ def main() -> None:
             print(f"error: {exc}", file=sys.stderr)
             sys.exit(1)
         print(result["text"])
+
+        # Log session for MCP verification
+        # The CLI 'query' command corresponds to graph_summary + resolve_nodes in MCP
+        try:
+            from datetime import datetime, timezone
+            entry = {"ts": datetime.now(timezone.utc).isoformat(), "tool": "nexo_graph_summary", "workspace": str(Path(".").resolve())}
+            _MCP_SESSION_LOG.parent.mkdir(parents=True, exist_ok=True)
+            with _MCP_SESSION_LOG.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+            entry2 = {"ts": datetime.now(timezone.utc).isoformat(), "tool": "nexo_resolve_nodes", "workspace": str(Path(".").resolve())}
+            with _MCP_SESSION_LOG.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry2) + "\n")
+        except Exception:
+            pass  # Silent fail for session logging
     elif cmd == "save-result":
         # nexo save-result --question Q --answer A --type T [--nodes N1 N2 ...]
         import argparse as _ap
@@ -1146,6 +1168,70 @@ def main() -> None:
             print(result["text"])
 
         if not result["pass"]:
+            sys.exit(1)
+
+    elif cmd == "verify-subagent":
+        from nexo.mcp_subagent import verify_mcp_with_subagent
+
+        workspace = Path(".")
+        session_log: Path | None = None
+        window_hours = 24
+        mode = "strict"
+        answer_text: str | None = None
+        as_json = False
+
+        args = sys.argv[2:]
+        i = 0
+        while i < len(args):
+            token = args[i]
+            if token == "--workspace" and i + 1 < len(args):
+                workspace = Path(args[i + 1]); i += 2
+            elif token.startswith("--workspace="):
+                workspace = Path(token.split("=", 1)[1]); i += 1
+            elif token == "--session-log" and i + 1 < len(args):
+                session_log = Path(args[i + 1]); i += 2
+            elif token.startswith("--session-log="):
+                session_log = Path(token.split("=", 1)[1]); i += 1
+            elif token == "--window-hours" and i + 1 < len(args):
+                try:
+                    window_hours = int(args[i + 1])
+                except ValueError:
+                    print("error: --window-hours must be an integer", file=sys.stderr)
+                    sys.exit(1)
+                i += 2
+            elif token.startswith("--window-hours="):
+                try:
+                    window_hours = int(token.split("=", 1)[1])
+                except ValueError:
+                    print("error: --window-hours must be an integer", file=sys.stderr)
+                    sys.exit(1)
+                i += 1
+            elif token == "--mode" and i + 1 < len(args):
+                mode = args[i + 1]; i += 2
+            elif token.startswith("--mode="):
+                mode = token.split("=", 1)[1]; i += 1
+            elif token == "--answer" and i + 1 < len(args):
+                answer_text = args[i + 1]; i += 2
+            elif token.startswith("--answer="):
+                answer_text = token.split("=", 1)[1]; i += 1
+            elif token == "--json":
+                as_json = True; i += 1
+            else:
+                print(f"error: unknown verify-subagent option '{token}'", file=sys.stderr)
+                sys.exit(1)
+
+        try:
+            _, exit_code = verify_mcp_with_subagent(
+                workspace=workspace,
+                session_log=session_log,
+                window_hours=window_hours,
+                mode=mode,
+                answer_text=answer_text,
+                as_json=as_json,
+            )
+            sys.exit(exit_code)
+        except Exception as exc:
+            print(f"error: {exc}", file=sys.stderr)
             sys.exit(1)
 
     # --- Internal subcommands for the standalone pipeline ---

@@ -85,29 +85,74 @@ Verifier subagent checks:
 - anti-fallback: detect if the run silently switched to grep/read-only behavior
 - answer evidence: confirm the final answer references graph-native entities
 
-Suggested verifier prompt template:
+### CLI Usage
 
-```text
-You are a verifier subagent for nexo MCP usage.
+```bash
+# Basic verification (requires minimum MCP calls)
+nexo verify-subagent --workspace . --mode basic --json
 
-Inputs:
-1) Workspace path
-2) Session log (~/.nexo_session.jsonl)
-3) Final answer text from the main agent
+# Strict verification (requires graph_summary + targeted query)
+nexo verify-subagent --workspace . --mode strict --window-hours 24 --json
 
-Rules:
-- Run: nexo verify-mcp --workspace <workspace> --mode strict --window-hours 24 --json
-- Fail if verification fails.
-- Fail if answer has no graph-native evidence (nodes/paths/communities).
-- Fail if answer claims graph usage but verification has zero nexo MCP calls.
+# With answer text for evidence validation
+nexo verify-subagent --workspace . --mode strict --answer "The main() function connects Community 1 to Community 2 via BFS traversal" --json
+```
 
-Output JSON:
+### Output Format
+
+JSON output includes:
+
+```json
 {
-	"verdict": "PASS" | "FAIL",
-	"mcp_summary": {...},
-	"answer_evidence_ok": true | false,
-	"reason": "..."
+  "verdict": "PASS" | "FAIL",
+  "mcp_summary": {
+    "total_calls": 5,
+    "graph_summary_calls": 1,
+    "targeted_query_calls": 4,
+    "tool_breakdown": {
+      "graph_summary": 1,
+      "resolve_nodes": 2,
+      "explain_node": 2
+    }
+  },
+  "answer_evidence_ok": true,
+  "anti_fallback_ok": true,
+  "token_usage_note": "Session used 5 nexo MCP tool(s) for graph-native operations",
+  "reason": "verification passed with adequate graph-native evidence"
 }
+```
+
+### Integration Pattern
+
+After a main analysis agent completes, run the verifier:
+
+```bash
+# Capture main agent answer
+ANSWER=$(main-agent-output.txt)
+
+# Verify MCP usage
+nexo verify-subagent --workspace . --mode strict --answer "$ANSWER" --json | jq .verdict
+```
+
+Exit codes:
+- `0`: verification passed (PASS)
+- `1`: verification failed (FAIL)
+
+### Programmatic Usage
+
+```python
+from nexo.mcp_subagent import run_verifier_subagent
+
+result = run_verifier_subagent(
+    workspace=Path("."),
+    mode="strict",
+    answer_text=main_agent_answer,
+)
+
+if result["verdict"] == "PASS":
+    print("MCP usage validated")
+else:
+    print(f"Validation failed: {result['reason']}")
 ```
 
 This subagent-based validation is preferred over isolated unit tests because it verifies real behavior in real sessions.

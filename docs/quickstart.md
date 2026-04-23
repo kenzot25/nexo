@@ -1,17 +1,19 @@
 # Quickstart
 
-Get first value in under 2 minutes.
+Get value in under 2 minutes.
 
 ## 1. Install
 
+**macOS / Linux:**
 ```bash
-pip install nexo
+curl -fsSL https://raw.githubusercontent.com/kenzot25/nexo/master/scripts/install.sh | sh
 ```
 
-For local development:
-
-```bash
-make setup
+**Windows:**
+```powershell
+$script = Join-Path $env:TEMP 'nexo-install.ps1'
+Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/kenzot25/nexo/master/scripts/install.ps1' -OutFile $script
+powershell -ExecutionPolicy Bypass -File $script
 ```
 
 ## 2. Build a graph
@@ -20,13 +22,15 @@ make setup
 nexo update .
 ```
 
+This creates `nexo-out/graph.json` and `nexo-out/GRAPH_REPORT.md`.
+
 ## 3. Start the MCP server
 
 ```bash
 nexo mcp nexo-out/graph.json
 ```
 
-This exposes graph-native MCP tools like node resolution, explanation, path search, subgraph expansion, workspace query, and graph summary.
+Connect your AI assistant to this MCP server.
 
 ## 4. Verify setup
 
@@ -34,14 +38,7 @@ This exposes graph-native MCP tools like node resolution, explanation, path sear
 nexo doctor
 ```
 
-If your host still depends on slash-command workflows, you can keep the legacy compatibility layer:
-
-```bash
-nexo install
-nexo claude install
-```
-
-## 5. Build and query graph context
+## 5. Query the graph
 
 ```bash
 nexo query "How do auth and transport connect?"
@@ -49,26 +46,25 @@ nexo query "How do auth and transport connect?"
 
 ## 6. Multi-repo workspaces
 
-If you have a folder full of repositories, you can index them all at once:
+For a folder with multiple repositories:
 
 ```bash
 nexo workspace . --mode central
 nexo workspace query "Explain the auth flow across all services"
 ```
 
-## Local command shortcuts
+---
 
-The repository includes a `Makefile` that runs commands with `.venv` automatically:
+## Next Steps
 
-```bash
-make t
-make test
-make r CMD="python -m pytest tests/test_export.py -q"
-make run CMD="python -m nexo update ."
-```
+- **[User Guide](USER_GUIDE.md)** - Detailed workflows and examples
+- **[CLI Reference](CLI_REFERENCE.md)** - All commands
+- **[MCP Guide](MCP_GUIDE.md)** - AI assistant integration
+- **[FAQ](faq.md)** - Common questions
 
-## Common issues
+## Common Issues
 
-- If `doctor` reports missing skill/version: run `nexo install` again if you still use the compatibility layer.
-- If hook checks fail: run `nexo claude install` again.
-- If `python` is missing: use `python3` and `make setup`.
+- **`doctor` reports missing skill:** Run `nexo install --local`
+- **Hook checks fail:** Run `nexo claude install`
+- **`python` not found:** Use `python3` or run `make setup`
+- **No graph found:** Run `nexo update .`
