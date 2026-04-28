@@ -171,6 +171,56 @@ def create_mcp_server(default_graph_path: str = "nexo-out/graph.json"):
     def graph_summary_resource() -> str:
         return json.dumps(graph_summary(graph_path=default_graph_path), indent=2)
 
+    # ── Conversation graph tools ─────────────────────────────────────────────
+
+    @mcp.tool(description="Check if user input matches multiple intents (ambiguity detection).")
+    def conversation_detect_ambiguity(
+        user_input: str,
+        graph_path: str | None = None,
+        top_k: int = 5,
+        threshold: float = 0.7,
+    ) -> dict[str, Any]:
+        return _qs.detect_ambiguity(
+            user_input,
+            graph_path=graph_path or default_graph_path,
+            top_k=top_k,
+            threshold=threshold,
+        )
+
+    @mcp.tool(description="Get valid next states from current conversation position.")
+    def conversation_next_states(
+        current_state: str,
+        user_input: str | None = None,
+        graph_path: str | None = None,
+    ) -> dict[str, Any]:
+        return _qs.get_valid_next_states(
+            current_state,
+            user_input,
+            graph_path=graph_path or default_graph_path,
+        )
+
+    @mcp.tool(description="Find conversation paths to reach a goal state.")
+    def conversation_find_paths(
+        goal: str,
+        graph_path: str | None = None,
+        max_paths: int = 5,
+    ) -> dict[str, Any]:
+        return _qs.find_conversation_paths(
+            goal,
+            graph_path=graph_path or default_graph_path,
+            max_paths=max_paths,
+        )
+
+    @mcp.tool(description="Get recovery path for a failure state.")
+    def conversation_get_recovery_path(
+        failure_state: str,
+        graph_path: str | None = None,
+    ) -> dict[str, Any]:
+        return _qs.get_recovery_path(
+            failure_state,
+            graph_path=graph_path or default_graph_path,
+        )
+
     return mcp
 
 

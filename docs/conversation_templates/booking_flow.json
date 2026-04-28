@@ -1,0 +1,249 @@
+{
+  "id": "booking_flow",
+  "name": "Tour Booking Conversation",
+  "description": "Multi-turn conversation flow for booking tours with slot collection",
+  "nodes": [
+    {
+      "id": "intent_greeting",
+      "type": "intent",
+      "label": "User greets",
+      "triggers": ["xin chào", "hi", "hello", "alo", "chào bạn"],
+      "confidence_threshold": 0.7,
+      "description": "Initial greeting from user"
+    },
+    {
+      "id": "resp_welcome_casual",
+      "type": "response",
+      "label": "Casual welcome message",
+      "templates": [
+        "Chào bạn! Cần mình giúp gì?",
+        "Hi! Có gì hot?",
+        "Xin chào! Mình có thể giúp gì cho bạn?"
+      ],
+      "tone": "casual",
+      "context": ["general", "support"]
+    },
+    {
+      "id": "intent_booking_inquiry",
+      "type": "intent",
+      "label": "Booking inquiry",
+      "triggers": ["đặt", "book", "booking", "mua", "tour"],
+      "confidence_threshold": 0.6,
+      "description": "User wants to book something"
+    },
+    {
+      "id": "state_collecting_booking_info",
+      "type": "state",
+      "label": "Collecting booking information",
+      "required_slots": ["num_people", "date", "budget"],
+      "optional_slots": ["hotel_rating", "preferences"],
+      "description": "Gathering booking details from user"
+    },
+    {
+      "id": "resp_ask_num_people",
+      "type": "response",
+      "label": "Ask number of people",
+      "templates": [
+        "Bạn đi bao nhiêu người?",
+        "Cho mình hỏi số người tham gia nhé?",
+        "Tour này cho mấy người bạn?"
+      ],
+      "tone": "friendly"
+    },
+    {
+      "id": "resp_ask_date",
+      "type": "response",
+      "label": "Ask travel date",
+      "templates": [
+        "Bạn dự định đi ngày nào?",
+        "Ngày khởi hành bạn chọn là khi nào?",
+        "Bạn muốn đi vào ngày mấy?"
+      ],
+      "tone": "friendly"
+    },
+    {
+      "id": "resp_ask_budget",
+      "type": "response",
+      "label": "Ask budget",
+      "templates": [
+        "Ngân sách của bạn khoảng bao nhiêu?",
+        "Bạn dự định chi bao nhiêu cho chuyến này?",
+        "Budget của bạn thế nào?"
+      ],
+      "tone": "friendly"
+    },
+    {
+      "id": "state_booking_complete",
+      "type": "state",
+      "label": "Booking information complete",
+      "required_slots": [],
+      "description": "All required slots collected"
+    },
+    {
+      "id": "resp_confirm_booking",
+      "type": "response",
+      "label": "Confirm booking details",
+      "templates": [
+        "Mình xác nhận lại: {num_people} người, ngày {date}, ngân sách {budget}. Đúng không?",
+        "Check lại với bạn: {num_people} người, đi ngày {date}, budget {budget}. OK nhé?"
+      ],
+      "tone": "friendly"
+    },
+    {
+      "id": "failure_ambiguity_detected",
+      "type": "failure_state",
+      "label": "Ambiguous input detected",
+      "recovery_path": "ask_clarification",
+      "max_retries": 2,
+      "description": "User input matches multiple intents"
+    },
+    {
+      "id": "ask_clarification",
+      "type": "response",
+      "label": "Ask for clarification",
+      "templates": [
+        "Bạn có thể nói rõ hơn không?",
+        "Mình chưa rõ ý bạn lắm. Có thể giải thích thêm?",
+        "Để mình hỏi lại: bạn muốn gì nhỉ?"
+      ],
+      "tone": "polite"
+    },
+    {
+      "id": "failure_missing_slots",
+      "type": "failure_state",
+      "label": "Missing required slots",
+      "recovery_path": "state_collecting_booking_info",
+      "max_retries": 3,
+      "description": "Not all required slots collected"
+    },
+    {
+      "id": "failure_user_confused",
+      "type": "failure_state",
+      "label": "User seems confused",
+      "recovery_path": "resp_offer_help",
+      "max_retries": 2,
+      "description": "User indicates confusion or frustration"
+    },
+    {
+      "id": "resp_offer_help",
+      "type": "response",
+      "label": "Offer human support",
+      "templates": [
+        "Có vẻ bạn đang bối rối. Mình chuyển bạn qua tổng đài viên nhé?",
+        "Để mình gọi người hỗ trợ bạn tốt hơn nha?",
+        "Bạn muốn nói chuyện với nhân viên không?"
+      ],
+      "tone": "empathetic"
+    }
+  ],
+  "edges": [
+    {
+      "source": "intent_greeting",
+      "target": "resp_welcome_casual",
+      "relation": "triggers",
+      "weight": 1.0
+    },
+    {
+      "source": "resp_welcome_casual",
+      "target": "intent_booking_inquiry",
+      "relation": "leads_to",
+      "condition": "user_shows_interest"
+    },
+    {
+      "source": "intent_booking_inquiry",
+      "target": "state_collecting_booking_info",
+      "relation": "leads_to",
+      "weight": 1.0
+    },
+    {
+      "source": "state_collecting_booking_info",
+      "target": "resp_ask_num_people",
+      "relation": "requires",
+      "condition": "missing_num_people"
+    },
+    {
+      "source": "state_collecting_booking_info",
+      "target": "resp_ask_date",
+      "relation": "requires",
+      "condition": "missing_date"
+    },
+    {
+      "source": "state_collecting_booking_info",
+      "target": "resp_ask_budget",
+      "relation": "requires",
+      "condition": "missing_budget"
+    },
+    {
+      "source": "resp_ask_num_people",
+      "target": "state_collecting_booking_info",
+      "relation": "collects_response",
+      "weight": 1.0
+    },
+    {
+      "source": "resp_ask_date",
+      "target": "state_collecting_booking_info",
+      "relation": "collects_response",
+      "weight": 1.0
+    },
+    {
+      "source": "resp_ask_budget",
+      "target": "state_collecting_booking_info",
+      "relation": "collects_response",
+      "weight": 1.0
+    },
+    {
+      "source": "state_collecting_booking_info",
+      "target": "state_booking_complete",
+      "relation": "transitions_when",
+      "condition": "all_slots_filled"
+    },
+    {
+      "source": "state_booking_complete",
+      "target": "resp_confirm_booking",
+      "relation": "triggers",
+      "weight": 1.0
+    },
+    {
+      "source": "intent_greeting",
+      "target": "failure_ambiguity_detected",
+      "relation": "can_become",
+      "condition": "confidence < 0.7"
+    },
+    {
+      "source": "failure_ambiguity_detected",
+      "target": "ask_clarification",
+      "relation": "requires_recovery",
+      "max_retries": 2
+    },
+    {
+      "source": "ask_clarification",
+      "target": "intent_greeting",
+      "relation": "resumes_at",
+      "weight": 1.0
+    },
+    {
+      "source": "state_collecting_booking_info",
+      "target": "failure_missing_slots",
+      "relation": "can_become",
+      "condition": "user_provides_incomplete_info"
+    },
+    {
+      "source": "failure_missing_slots",
+      "target": "state_collecting_booking_info",
+      "relation": "requires_recovery",
+      "max_retries": 3
+    },
+    {
+      "source": "state_collecting_booking_info",
+      "target": "failure_user_confused",
+      "relation": "can_become",
+      "condition": "user_expresses_confusion"
+    },
+    {
+      "source": "failure_user_confused",
+      "target": "resp_offer_help",
+      "relation": "requires_recovery",
+      "max_retries": 2
+    }
+  ]
+}

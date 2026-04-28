@@ -285,6 +285,84 @@ def save_query_result(
     return out_path
 
 
+def save_conversation_turn(
+    session_id: str,
+    turn_id: int,
+    user_input: str,
+    ai_response: str,
+    memory_dir: Path,
+    matched_nodes: list[str] | None = None,
+    current_state: str | None = None,
+) -> Path:
+    """Save a conversation turn as markdown so it gets extracted into the graph.
+
+    Files are stored in memory_dir (typically nexo-out/memory/) with YAML frontmatter
+    that captures conversation metadata for graph extraction.
+
+    Args:
+        session_id: Unique session identifier
+        turn_id: Turn number in the conversation
+        user_input: User's input text
+        ai_response: AI's response text
+        memory_dir: Directory to save the turn file
+        matched_nodes: Node IDs that matched the user input
+        current_state: Current conversation state
+
+    Returns:
+        Path to the saved file
+    """
+    memory_dir = Path(memory_dir)
+    memory_dir.mkdir(parents=True, exist_ok=True)
+
+    now = datetime.now(timezone.utc)
+    slug = re.sub(r"[^\w]", "_", f"{session_id}_{turn_id}")[:50].strip("_")
+    filename = f"turn_{now.strftime('%Y%m%d_%H%M%S')}_{slug}.md"
+
+    frontmatter_lines = [
+        "---",
+        'type: "conversation_turn"',
+        f'date: "{now.isoformat()}"',
+        f'session_id: "{_yaml_str(session_id)}"',
+        f'turn_id: {turn_id}',
+        'contributor: "nexo"',
+    ]
+
+    if matched_nodes:
+        nodes_str = ", ".join(f'"{n}"' for n in matched_nodes[:10])
+        frontmatter_lines.append(f"matched_nodes: [{nodes_str}]")
+
+    if current_state:
+        frontmatter_lines.append(f'current_state: "{_yaml_str(current_state)}"')
+
+    frontmatter_lines.append("---")
+
+    body_lines = [
+        "",
+        f"# Turn {turn_id}",
+        "",
+        "## User Input",
+        "",
+        user_input,
+        "",
+        "## AI Response",
+        "",
+        ai_response,
+    ]
+
+    if matched_nodes:
+        body_lines += ["", "## Matched Nodes", ""]
+        body_lines += [f"- {n}" for n in matched_nodes]
+
+    if current_state:
+        body_lines += ["", "## Current State", ""]
+        body_lines += [f"`{current_state}`"]
+
+    content = "\n".join(frontmatter_lines + body_lines)
+    out_path = memory_dir / filename
+    out_path.write_text(content, encoding="utf-8")
+    return out_path
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Fetch a URL into a nexo /raw folder")

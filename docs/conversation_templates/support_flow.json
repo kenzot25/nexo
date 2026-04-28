@@ -1,0 +1,237 @@
+{
+  "id": "support_flow",
+  "name": "Customer Support Conversation",
+  "description": "General customer support flow with complaint handling and escalation paths",
+  "nodes": [
+    {
+      "id": "intent_complaint",
+      "type": "intent",
+      "label": "User complaint",
+      "triggers": ["phàn nàn", "complaint", "tệ", "tệ quá", "dở", "không hài lòng", "bực mình"],
+      "confidence_threshold": 0.6,
+      "description": "User is complaining about something"
+    },
+    {
+      "id": "resp_apologize",
+      "type": "response",
+      "label": "Apologize to user",
+      "templates": [
+        "Mình rất tiếc về trải nghiệm này. Thành thật xin lỗi bạn!",
+        "Mình hiểu sự bực bội của bạn. Xin lỗi vì sự cố này!",
+        "Rất mong bạn thông cảm. Mình xin lỗi về việc này!"
+      ],
+      "tone": "empathetic",
+      "context": ["complaint", "support"]
+    },
+    {
+      "id": "state_collecting_complaint_details",
+      "type": "state",
+      "label": "Collecting complaint details",
+      "required_slots": ["issue_type", "order_id", "description"],
+      "optional_slots": ["photos", "receipt"],
+      "description": "Gathering details about the complaint"
+    },
+    {
+      "id": "resp_ask_issue_type",
+      "type": "response",
+      "label": "Ask about issue type",
+      "templates": [
+        "Bạn có thể nói rõ hơn về vấn đề gặp phải không?",
+        "Sự cố này thuộc loại gì vậy bạn?",
+        "Bạn gặp vấn đề gì chính xác?"
+      ],
+      "tone": "empathetic"
+    },
+    {
+      "id": "resp_ask_order_id",
+      "type": "response",
+      "label": "Ask for order ID",
+      "templates": [
+        "Cho mình xin mã đơn hàng với ạ?",
+        "Bạn có mã đơn hàng không?",
+        "Mã đơn/đặt chỗ của bạn là gì nhỉ?"
+      ],
+      "tone": "polite"
+    },
+    {
+      "id": "state_escalate_to_human",
+      "type": "state",
+      "label": "Escalate to human agent",
+      "required_slots": ["complaint_summary", "priority"],
+      "description": "Hand off to human support agent"
+    },
+    {
+      "id": "resp_escalate_confirm",
+      "type": "response",
+      "label": "Confirm escalation",
+      "templates": [
+        "Mình sẽ chuyển bạn đến tổng đài viên. Vui lòng chờ trong giây lát.",
+        "Để mình gọi người hỗ trợ chuyên sâu hơn cho bạn nhé.",
+        "Mình chuyển bạn qua bộ phận chuyên môn. Đợi mình chút nha."
+      ],
+      "tone": "reassuring"
+    },
+    {
+      "id": "failure_repeated_complaint",
+      "type": "failure_state",
+      "label": "User repeating complaint",
+      "recovery_path": "resp_escalate_confirm",
+      "max_retries": 2,
+      "description": "User is repeating the same complaint - escalate"
+    },
+    {
+      "id": "failure_angry_user",
+      "type": "failure_state",
+      "label": "Angry user detected",
+      "recovery_path": "resp_urgent_escalate",
+      "max_retries": 1,
+      "description": "User is angry - immediate escalation needed"
+    },
+    {
+      "id": "resp_urgent_escalate",
+      "type": "response",
+      "label": "Urgent escalation",
+      "templates": [
+        "Mình hiểu bạn đang rất bực. Mình ưu tiên chuyển bạn qua quản lý ngay.",
+        "Rất xin lỗi, để mình gọi quản lý hỗ trợ bạn ngay lập tức.",
+        "Trường hợp này cần ưu tiên. Mình gọi người giải quyết ngay."
+      ],
+      "tone": "urgent_empathetic"
+    },
+    {
+      "id": "intent_general_question",
+      "type": "intent",
+      "label": "General question",
+      "triggers": ["hỏi", "question", "muốn biết", "cho mình hỏi", "thắc mắc"],
+      "confidence_threshold": 0.5,
+      "description": "User has a general question"
+    },
+    {
+      "id": "resp_offer_resolution",
+      "type": "response",
+      "label": "Offer resolution options",
+      "templates": [
+        "Mình có thể giúp bạn các phương án sau:",
+        "Đây là các cách mình có thể hỗ trợ:",
+        "Mình đề xuất các giải pháp này:"
+      ],
+      "tone": "helpful"
+    },
+    {
+      "id": "state_resolved",
+      "type": "state",
+      "label": "Issue resolved",
+      "required_slots": [],
+      "description": "Complaint or issue has been resolved"
+    },
+    {
+      "id": "resp_close_conversation",
+      "type": "response",
+      "label": "Close conversation",
+      "templates": [
+        "Cảm ơn bạn đã liên hệ. Chúc bạn ngày tốt lành!",
+        "Mong được hỗ trợ bạn lần sau. Tạm biệt!",
+        "Nếu còn gì cần hỗ trợ, bạn cứ nhắn mình nhé!"
+      ],
+      "tone": "friendly"
+    }
+  ],
+  "edges": [
+    {
+      "source": "intent_complaint",
+      "target": "resp_apologize",
+      "relation": "triggers",
+      "weight": 1.0
+    },
+    {
+      "source": "resp_apologize",
+      "target": "state_collecting_complaint_details",
+      "relation": "leads_to",
+      "weight": 1.0
+    },
+    {
+      "source": "state_collecting_complaint_details",
+      "target": "resp_ask_issue_type",
+      "relation": "requires",
+      "condition": "missing_issue_type"
+    },
+    {
+      "source": "state_collecting_complaint_details",
+      "target": "resp_ask_order_id",
+      "relation": "requires",
+      "condition": "missing_order_id"
+    },
+    {
+      "source": "resp_ask_issue_type",
+      "target": "state_collecting_complaint_details",
+      "relation": "collects_response",
+      "weight": 1.0
+    },
+    {
+      "source": "resp_ask_order_id",
+      "target": "state_collecting_complaint_details",
+      "relation": "collects_response",
+      "weight": 1.0
+    },
+    {
+      "source": "state_collecting_complaint_details",
+      "target": "resp_offer_resolution",
+      "relation": "leads_to",
+      "condition": "all_slots_filled"
+    },
+    {
+      "source": "resp_offer_resolution",
+      "target": "state_resolved",
+      "relation": "leads_to",
+      "condition": "user_accepts_resolution"
+    },
+    {
+      "source": "state_resolved",
+      "target": "resp_close_conversation",
+      "relation": "triggers",
+      "weight": 1.0
+    },
+    {
+      "source": "state_collecting_complaint_details",
+      "target": "failure_repeated_complaint",
+      "relation": "can_become",
+      "condition": "user_repeats_same_issue"
+    },
+    {
+      "source": "failure_repeated_complaint",
+      "target": "resp_escalate_confirm",
+      "relation": "requires_recovery",
+      "max_retries": 2
+    },
+    {
+      "source": "resp_escalate_confirm",
+      "target": "state_escalate_to_human",
+      "relation": "leads_to",
+      "weight": 1.0
+    },
+    {
+      "source": "state_collecting_complaint_details",
+      "target": "failure_angry_user",
+      "relation": "can_become",
+      "condition": "user_expresses_anger"
+    },
+    {
+      "source": "failure_angry_user",
+      "target": "resp_urgent_escalate",
+      "relation": "requires_recovery",
+      "max_retries": 1
+    },
+    {
+      "source": "resp_urgent_escalate",
+      "target": "state_escalate_to_human",
+      "relation": "leads_to",
+      "weight": 1.0
+    },
+    {
+      "source": "intent_general_question",
+      "target": "resp_offer_resolution",
+      "relation": "leads_to",
+      "weight": 1.0
+    }
+  ]
+}

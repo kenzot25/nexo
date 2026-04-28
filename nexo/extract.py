@@ -3222,6 +3222,35 @@ def collect_files(target: Path, *, follow_symlinks: bool = False, root: Path | N
     return sorted(results)
 
 
+def extract_conversation_templates(
+    template_paths: list[Path],
+) -> dict[str, Any]:
+    """Extract nodes+edges from conversation template JSON files.
+
+    Reads JSON template files following the conversation template schema
+    and outputs a nodes+edges dict compatible with build.py.
+
+    Args:
+        template_paths: List of paths to JSON template files
+
+    Returns:
+        Dict with 'nodes' and 'edges' keys for build.py
+    """
+    try:
+        from nexo.conversation_templates import (
+            extract_conversation_templates as _extract_templates,
+        )
+    except ImportError:
+        return {"nodes": [], "edges": [], "error": "conversation_templates module not found"}
+
+    all_nodes, all_edges = _extract_templates(template_paths)
+
+    return {
+        "nodes": all_nodes,
+        "edges": all_edges,
+    }
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python -m nexo.extract <file_or_dir> ...", file=sys.stderr)

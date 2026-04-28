@@ -5,6 +5,7 @@ import platform
 import re
 import shutil
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -608,6 +609,19 @@ def main() -> None:
         print("  hook status             check if git hooks are installed")
         print("  claude install          write nexo section to CLAUDE.md + PreToolUse hook (Claude Code)")
         print("  claude uninstall        remove nexo section from CLAUDE.md + PreToolUse hook")
+        print()
+        print("Conversation commands:")
+        print("  conversation-status     show conversation metrics and health dashboard")
+        print("    --db PATH              sessions database path (default: ~/.nexo/sessions.db)")
+        print("    --json                 output as JSON")
+        print("  conversation-export     export conversation sessions to file")
+        print("    --db PATH              sessions database path")
+        print("    --output PATH          output file path (default: nexo-out/conversations.json)")
+        print("    --format FORMAT        output format: json or md (default: json)")
+        print("  conversation-session ID  show details of a specific session")
+        print("    --db PATH              sessions database path")
+        print("  conversation-list        list all conversation sessions")
+        print("    --db PATH              sessions database path")
         print()
         return
 
@@ -1610,6 +1624,139 @@ def main() -> None:
         
         to_canvas(G, communities, str(vault_dir / "graph.canvas"), community_labels=labels or None)
         print(f"Canvas: {vault_dir}/graph.canvas - open in Obsidian for structured community layout")
+
+    elif cmd == "conversation-status":
+        # nexo conversation-status [--db PATH] [--json]
+        from nexo.dashboard import create_dashboard
+        db_path = None
+        as_json = False
+        args = sys.argv[2:]
+        i = 0
+        while i < len(args):
+            if args[i] == "--db" and i + 1 < len(args):
+                db_path = Path(args[i + 1]); i += 2
+            elif args[i] == "--json":
+                as_json = True; i += 1
+            else:
+                i += 1
+
+        dashboard = create_dashboard(db_path)
+        if as_json:
+            print(json.dumps(dashboard.get_metrics_json(), indent=2))
+        else:
+            print(dashboard.generate_report())
+
+    elif cmd == "conversation-export":
+        # nexo conversation-export [--db PATH] [--output PATH] [--format json|md]
+        from nexo.dashboard import create_dashboard
+        from nexo.session import SessionStore
+        db_path = None
+        output_path = Path("nexo-out/conversations.json")
+        format = "json"
+        args = sys.argv[2:]
+        i = 0
+        while i < len(args):
+            if args[i] == "--db" and i + 1 < len(args):
+                db_path = Path(args[i + 1]); i += 2
+            elif args[i] == "--output" and i + 1 < len(args):
+                output_path = Path(args[i + 1]); i += 2
+            elif args[i] == "--format" and i + 1 < len(args):
+                format = args[i + 1]; i += 2
+            else:
+                i += 1
+
+        dashboard = create_dashboard(db_path)
+        if format == "md":
+            output_path = output_path.with_suffix(".md")
+            dashboard.export_report(output_path, format="md")
+        else:
+            # Export sessions data as JSON
+            store = SessionStore(db_path)
+            sessions_data = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "sessions": [],
+            }
+            for session_id in store.list_sessions():
+                turns = store.get_turns(session_id)
+                checkpoint = store.load_checkpoint(session_id)
+                sessions_data["sessions"].append({
+                    "session_id": session_id,
+                    "turns": turns,
+                    "checkpoint": {
+                        "turn_id": checkpoint.turn_id if checkpoint else None,
+                        "current_node": checkpoint.current_node if checkpoint else None,
+                        "path_history": checkpoint.path_history if checkpoint else [],
+                        "collected_slots": checkpoint.collected_slots if checkpoint else {},
+                    } if checkpoint else None,
+                })
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(sessions_data, indent=2), encoding="utf-8")
+        print(f"Exported to: {output_path}")
+
+    elif cmd == "conversation-session":
+        # nexo conversation-session <session_id> [--db PATH]
+        from nexo.session import SessionStore
+        if len(sys.argv) < 3:
+            print("Usage: nexo conversation-session <session_id> [--db PATH]", file=sys.stderr)
+            sys.exit(1)
+
+        session_id = sys.argv[2]
+        db_path = None
+        args = sys.argv[3:]
+        i = 0
+        while i < len(args):
+            if args[i] == "--db" and i + 1 < len(args):
+                db_path = Path(args[i + 1]); i += 2
+            else:
+                i += 1
+
+        store = SessionStore(db_path)
+        checkpoint = store.load_checkpoint(session_id)
+        turns = store.get_turns(session_id)
+
+        if not checkpoint:
+            print(f"Session '{session_id}' not found", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Session: {session_id}")
+        print(f"Current Node: {checkpoint.current_node}")
+        print(f"Turn Count: {len(turns)}")
+        print(f"Path History: {' -> '.join(checkpoint.path_history)}")
+        if checkpoint.collected_slots:
+            print(f"Collected Slots: {checkpoint.collected_slots}")
+        print()
+        print("Turns:")
+        for turn in turns:
+            print(f"  [{turn['turn_id']}] User: {turn['user_input']}")
+            print(f"           AI: {turn['ai_response']}")
+            if turn.get('matched_nodes'):
+                print(f"           Matched: {', '.join(turn['matched_nodes'])}")
+            print()
+
+    elif cmd == "conversation-list":
+        # nexo conversation-list [--db PATH]
+        from nexo.session import SessionStore
+        db_path = None
+        args = sys.argv[2:]
+        i = 0
+        while i < len(args):
+            if args[i] == "--db" and i + 1 < len(args):
+                db_path = Path(args[i + 1]); i += 2
+            else:
+                i += 1
+
+        store = SessionStore(db_path)
+        sessions = store.list_sessions()
+
+        if not sessions:
+            print("No sessions found")
+        else:
+            print(f"Sessions ({len(sessions)}):")
+            for session_id in sessions:
+                checkpoint = store.load_checkpoint(session_id)
+                turns = store.get_turns(session_id)
+                status = "active" if checkpoint and checkpoint.current_node else "empty"
+                print(f"  {session_id}: {len(turns)} turns, {status} ({checkpoint.current_node if checkpoint else 'N/A'})")
 
     elif cmd == "internal-detect-incremental":
         # internal-detect-incremental <root_path> <out_dir>

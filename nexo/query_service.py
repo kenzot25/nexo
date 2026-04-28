@@ -466,3 +466,298 @@ def read_graph_report(*, graph_path: str | Path = "nexo-out/graph.json") -> str:
     if not report_path.exists():
         raise FileNotFoundError(f"Graph report not found: {report_path}")
     return report_path.read_text(encoding="utf-8")
+
+
+# ── Conversation graph query functions ───────────────────────────────────────
+
+
+def detect_ambiguity(
+    user_input: str,
+    *,
+    graph_path: str | Path = "nexo-out/graph.json",
+    top_k: int = 5,
+    threshold: float = 0.7,
+) -> dict[str, Any]:
+    """Check if user input matches multiple intents (ambiguity detection).
+
+    Args:
+        user_input: User's input text
+        graph_path: Path to graph.json
+        top_k: Number of top matches to return
+        threshold: Minimum score to consider a match
+
+    Returns:
+        Dict with is_ambiguous flag and candidate intents
+    """
+    G = _load_graph(graph_path)
+    terms = _default_terms(user_input)
+
+    # Find all intent nodes
+    intent_nodes = [
+        (nid, data)
+        for nid, data in G.nodes(data=True)
+        if data.get("type") == "intent"
+    ]
+
+    # Score each intent node against the input
+    matches = []
+    for nid, data in intent_nodes:
+        triggers = data.get("triggers", [])
+        label = (data.get("label") or "").lower()
+
+        # Check if any trigger matches
+        score = sum(
+            1 for t in terms
+            if any(t in trigger.lower() for trigger in triggers)
+        )
+        # Also check label match
+        if any(t in label for t in terms):
+            score += 0.5
+
+        if score >= threshold:
+            matches.append({
+                "node_id": nid,
+                "label": data.get("label", nid),
+                "score": score,
+                "triggers": triggers,
+            })
+
+    # Sort by score descending
+    matches.sort(key=lambda m: m["score"], reverse=True)
+    matches = matches[:top_k]
+
+    is_ambiguous = len(matches) > 1
+
+    return {
+        "user_input": user_input,
+        "is_ambiguous": is_ambiguous,
+        "match_count": len(matches),
+        "candidates": matches,
+        "text": (
+            f"Ambiguous: {len(matches)} intents match" if is_ambiguous
+            else f"Clear: {len(matches)} intent match" if matches
+            else "No matching intents found"
+        ),
+    }
+
+
+def get_valid_next_states(
+    current_state: str,
+    user_input: str | None = None,
+    *,
+    graph_path: str | Path = "nexo-out/graph.json",
+) -> dict[str, Any]:
+    """Get valid next states from current conversation position.
+
+    Args:
+        current_state: Current state node ID or label
+        user_input: Optional user input to filter transitions by condition
+        graph_path: Path to graph.json
+
+    Returns:
+        Dict with valid next states and transition info
+    """
+    G = _load_graph(graph_path)
+
+    # Resolve current state node
+    node_ids = _find_node(G, current_state)
+    if not node_ids:
+        return {
+            "current_state": current_state,
+            "error": f"State '{current_state}' not found",
+            "next_states": [],
+            "text": f"State '{current_state}' not found in graph",
+        }
+
+    current_nid = node_ids[0]
+    current_data = G.nodes[current_nid]
+
+    # Find outgoing edges from current state
+    next_states = []
+    for neighbor in G.neighbors(current_nid):
+        edge_data = G[current_nid][neighbor]
+        # Get edge attributes (may be nested)
+        if isinstance(G, nx.MultiGraph):
+            edge_attrs = next(iter(edge_data.values()), {})
+        else:
+            edge_attrs = edge_data
+
+        condition = edge_attrs.get("condition")
+        relation = edge_attrs.get("relation", "leads_to")
+
+        # Skip if condition doesn't match user input
+        if user_input and condition:
+            if condition.lower() not in user_input.lower():
+                continue
+
+        neighbor_data = G.nodes[neighbor]
+        next_states.append({
+            "node_id": neighbor,
+            "label": neighbor_data.get("label", neighbor),
+            "type": neighbor_data.get("type", "unknown"),
+            "condition": condition,
+            "relation": relation,
+        })
+
+    return {
+        "current_state": current_data.get("label", current_nid),
+        "next_states": next_states,
+        "count": len(next_states),
+        "text": (
+            f"From '{current_data.get('label', current_nid)}': "
+            f"{len(next_states)} valid next states"
+        ),
+    }
+
+
+def find_conversation_paths(
+    goal: str,
+    *,
+    graph_path: str | Path = "nexo-out/graph.json",
+    max_paths: int = 5,
+) -> dict[str, Any]:
+    """Find conversation paths to reach a goal state.
+
+    Args:
+        goal: Goal state node ID or label
+        graph_path: Path to graph.json
+        max_paths: Maximum number of paths to return
+
+    Returns:
+        Dict with paths from entry points to goal
+    """
+    import networkx as nx
+
+    G = _load_graph(graph_path)
+
+    # Resolve goal node
+    goal_ids = _find_node(G, goal)
+    if not goal_ids:
+        return {
+            "goal": goal,
+            "error": f"Goal '{goal}' not found",
+            "paths": [],
+            "text": f"Goal '{goal}' not found in graph",
+        }
+
+    goal_nid = goal_ids[0]
+
+    # Find entry points (intent nodes with no incoming edges from states)
+    entry_points = [
+        nid for nid, data in G.nodes(data=True)
+        if data.get("type") == "intent"
+    ]
+
+    if not entry_points:
+        entry_points = [nid for nid in G.nodes() if G.in_degree(nid) == 0]
+
+    # Find shortest paths from entry points to goal
+    paths = []
+    for entry in entry_points[:10]:  # Limit entry points to check
+        try:
+            path = nx.shortest_path(G, entry, goal_nid)
+            if len(path) > 1:
+                path_labels = [G.nodes[nid].get("label", nid) for nid in path]
+                paths.append({
+                    "entry": G.nodes[entry].get("label", entry),
+                    "nodes": path,
+                    "labels": path_labels,
+                    "length": len(path) - 1,
+                })
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            continue
+
+    paths.sort(key=lambda p: p["length"])
+    paths = paths[:max_paths]
+
+    return {
+        "goal": G.nodes[goal_nid].get("label", goal_nid),
+        "paths": paths,
+        "path_count": len(paths),
+        "text": (
+            f"Found {len(paths)} paths to '{G.nodes[goal_nid].get('label', goal_nid)}'"
+            if paths
+            else f"No paths found to '{goal}'"
+        ),
+    }
+
+
+def get_recovery_path(
+    failure_state: str,
+    *,
+    graph_path: str | Path = "nexo-out/graph.json",
+) -> dict[str, Any]:
+    """Get recovery path for a failure state.
+
+    Args:
+        failure_state: Failure state node ID or label
+        graph_path: Path to graph.json
+
+    Returns:
+        Dict with recovery path and max retries
+    """
+    import networkx as nx
+
+    G = _load_graph(graph_path)
+
+    # Resolve failure state node
+    node_ids = _find_node(G, failure_state)
+    if not node_ids:
+        return {
+            "failure_state": failure_state,
+            "error": f"Failure state '{failure_state}' not found",
+            "text": f"Failure state '{failure_state}' not found",
+        }
+
+    failure_nid = node_ids[0]
+    failure_data = G.nodes[failure_nid]
+
+    # Check if it's actually a failure state
+    if failure_data.get("type") != "failure_state":
+        return {
+            "failure_state": failure_data.get("label", failure_nid),
+            "warning": "Node is not a failure_state type",
+            "text": f"'{failure_data.get('label', failure_nid)}' is not a failure state",
+        }
+
+    # Get recovery path from node attributes
+    recovery_path = failure_data.get("recovery_path", "")
+    max_retries = failure_data.get("max_retries", 2)
+
+    # Try to resolve recovery path
+    recovery_node = None
+    if recovery_path:
+        recovery_ids = _find_node(G, recovery_path)
+        if recovery_ids:
+            recovery_node = {
+                "node_id": recovery_ids[0],
+                "label": G.nodes[recovery_ids[0]].get("label", recovery_path),
+                "type": G.nodes[recovery_ids[0]].get("type"),
+            }
+
+    # Find path to recovery node if specified
+    path_to_recovery = None
+    if recovery_node:
+        try:
+            path = nx.shortest_path(G, failure_nid, recovery_node["node_id"])
+            path_labels = [G.nodes[nid].get("label", nid) for nid in path]
+            path_to_recovery = {
+                "nodes": path,
+                "labels": path_labels,
+            }
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            pass
+
+    return {
+        "failure_state": failure_data.get("label", failure_nid),
+        "recovery_path": recovery_path,
+        "max_retries": max_retries,
+        "recovery_node": recovery_node,
+        "path_to_recovery": path_to_recovery,
+        "text": (
+            f"Recovery from '{failure_data.get('label', failure_nid)}': "
+            f"{recovery_path} (max {max_retries} retries)"
+            if recovery_path
+            else f"No recovery path defined for '{failure_data.get('label', failure_nid)}'"
+        ),
+    }
